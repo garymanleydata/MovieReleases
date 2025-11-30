@@ -6,16 +6,24 @@ from datetime import datetime, timedelta
 def f_load_to_landing(vCon, dfData, vSchema, vTable):
     """
     Loads data into the Landing Layer (Overwrite/Replace).
+    Landing is always a snapshot of the latest extraction.
     """
     vFullTableName = f"{vSchema}.{vTable}"
     print(f"Loading {len(dfData)} rows to Landing: {vFullTableName}")
+    
+    # Create Schema
     vCon.sql(f"CREATE SCHEMA IF NOT EXISTS {vSchema}")
+    
+    # Register view
     vCon.register('v_landing_buffer', dfData)
+    
+    # Create or Replace (Landing is ephemeral)
     vCon.sql(f"CREATE OR REPLACE TABLE {vFullTableName} AS SELECT * FROM v_landing_buffer")
 
 def f_process_scd2(vCon, vConfigDict):
     """
     Executes a metadata-driven SCD Type 2 Merge.
+    Ends previous records with Yesterday's date. Starts new records with Today.
     """
     vSrcDb = "MovieReleases" 
     vSrcSchema = vConfigDict['source_schema']
@@ -32,6 +40,7 @@ def f_process_scd2(vCon, vConfigDict):
     
     print(f"--- Processing SCD2: {vFqSource} -> {vFqTarget} ---")
     
+    # 1. Ensure Target Exists (Initialize History if empty)
     vCon.sql(f"CREATE SCHEMA IF NOT EXISTS {vSrcDb}.{vTgtSchema}")
     
     try:
@@ -49,15 +58,21 @@ def f_process_scd2(vCon, vConfigDict):
         print("Initialization Complete.")
         return
 
-    # Detect Changes logic
+    # 2. Detect Changes
+    # Get list of data columns (exclude meta columns)
     vCols = [row[0] for row in vCon.sql(f"DESCRIBE {vFqSource}").fetchall()]
     
+    # Helper to build hashed string with explicit table alias to avoid ambiguity
     def build_hash_logic(vAlias):
+        # Exclude the primary key from the hash, check content columns
         vContentCols = [c for c in vCols if c != vKey]
+        # Construct: COALESCE(CAST(s.col AS VARCHAR), '') || ...
+        # This explicitly prefixes the alias (s. or t.) to fix the Ambiguous reference error
         vConcatStr = " || ".join([f"COALESCE(CAST({vAlias}.{c} AS VARCHAR), '')" for c in vContentCols])
         return f"md5({vConcatStr})"
     
-    # Update Old
+    # 3. Perform the Updates (Close old records)
+    # Update target where key matches AND content differs AND is currently active
     vUpdateSql = f"""
         UPDATE {vFqTarget}
         SET valid_to_uda = CAST('{vYesterday}' AS DATE),
@@ -73,7 +88,8 @@ def f_process_scd2(vCon, vConfigDict):
     """
     vCon.sql(vUpdateSql)
     
-    # Insert New
+    # 4. Insert New/Changed Records
+    # Insert where key is new OR key existed but was just closed (changed)
     vInsertSql = f"""
         INSERT INTO {vFqTarget}
         SELECT s.*, 
@@ -121,14 +137,14 @@ def f_add_surrogate_key(vCon, dfNewData, vTargetTableName, vBusinessKeyCol, vSkC
         dfResult = pd.merge(dfNewData, dfExistingSk, on=vBusinessKeyCol, how='left')
         
         # 4. Separate rows that need new keys
-        mask_new = dfResult[vSkColName].isna()
-        vNewCount = mask_new.sum()
+        vMaskNew = dfResult[vSkColName].isna()
+        vNewCount = vMaskNew.sum()
         
         if vNewCount > 0:
             print(f"Assigning new SKs to {vNewCount} rows...")
             # Generate range: (Max + 1) to (Max + NewCount)
-            new_sks = np.arange(vMaxSk + 1, vMaxSk + vNewCount + 1)
-            dfResult.loc[mask_new, vSkColName] = new_sks
+            vNewSks = np.arange(vMaxSk + 1, vMaxSk + vNewCount + 1)
+            dfResult.loc[vMaskNew, vSkColName] = vNewSks
             
         # Ensure SK is integer
         dfResult[vSkColName] = dfResult[vSkColName].astype(int)
