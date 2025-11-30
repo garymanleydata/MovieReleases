@@ -1,0 +1,7 @@
+duckdb
+pandas
+requests
+python-dotenv
+jupyter
+ipykernel
+papermill
