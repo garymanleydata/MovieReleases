@@ -1,8 +1,11 @@
 name: Daily Movie Ingest
 
 on:
+  # 1. Automatic Schedule: Runs at 08:00 UTC every day
   schedule:
     - cron: '0 8 * * *'
+  
+  # 2. Manual Trigger: Allows you to click a "Run Now" button in GitHub Actions
   workflow_dispatch:
 
 jobs:
@@ -10,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --- SETUP ---
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -23,9 +27,33 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Orchestrate Pipeline
+      # --- EXECUTION ---
+      - name: Run Orchestrator
         env:
+          # Inject the secret from GitHub Settings into the runner
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         run: |
-          # Convert the orchestration notebook to a script and run it
+          # Convert the Orchestrator notebook to a script and run it
+          # The orchestrator handles the logic of which child notebooks to run today
           jupyter nbconvert --to python --execute --stdout orchestrate_pipeline.ipynb | python
+
+      # --- ARTIFACTS (Reports & Logs) ---
+      
+      # 1. Upload Excel Report (Only if it exists)
+      - name: Upload Weekly Report
+        if: success() # Only run if pipeline succeeded
+        uses: actions/upload-artifact@v4
+        with:
+          name: Weekly_Movie_Report
+          path: Upcoming_Releases_Report.xlsx
+          # Don't fail the job if the report wasn't scheduled for today
+          if-no-files-found: ignore
+
+      # 2. Upload Execution Logs (Useful for debugging failed runs)
+      - name: Upload Execution Logs
+        if: always() # Run even if pipeline failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pipeline_Logs
+          path: logs/
+          if-no-files-found: ignore
