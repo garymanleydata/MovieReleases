@@ -51,7 +51,7 @@ def f_process_scd2(vCon, vConfigDict):
             CREATE TABLE {vFqTarget} AS 
             SELECT *, 
                    CAST('{vToday}' AS DATE) as valid_from_uda, 
-                   CAST(NULL AS DATE) as valid_to_uda,
+                   CAST(NULL AS DATE) as valid_to_uda, 
                    CAST(1 AS BOOLEAN) as is_current_uda
             FROM {vFqSource}
         """)
@@ -90,12 +90,16 @@ def f_process_scd2(vCon, vConfigDict):
     
     # 4. Insert New/Changed Records
     # Insert where key is new OR key existed but was just closed (changed)
+    # FIX: Use 'BY NAME' logic with explicit aliases for the meta columns.
+    # This forces DuckDB to map 'poster_url' to 'poster_url' and 'valid_from_uda' to 'valid_from_uda', regardless of position.
+    
     vInsertSql = f"""
-        INSERT INTO {vFqTarget}
-        SELECT s.*, 
-               CAST('{vToday}' AS DATE) as valid_from_uda, 
-               CAST(NULL AS DATE) as valid_to_uda, 
-               TRUE as is_current_uda
+        INSERT INTO {vFqTarget} BY NAME
+        SELECT 
+            s.*, 
+            CAST('{vToday}' AS DATE) AS valid_from_uda, 
+            CAST(NULL AS DATE) AS valid_to_uda, 
+            TRUE AS is_current_uda
         FROM {vFqSource} s
         LEFT JOIN {vFqTarget} t 
             ON s.{vKey} = t.{vKey} 
