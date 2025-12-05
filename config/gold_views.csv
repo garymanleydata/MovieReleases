@@ -1,0 +1,8 @@
+target_view_name,source_schema,source_table,source_columns,target_columns,filter_condition
+"Film Dimension",silver,film_release_dim,sk_film_release|movie_title|poster_url|genres|cast_members|imdb_id_ref,sk_film_release|"Movie Title"|"Poster URL"|"Genre List"|"Cast Members"|"IMDb ID",
+"Calendar Dimension",silver,date_dim,sk_date|date_actual|day_name|month_name|year_actual|quarter_actual|week_of_year|is_weekend|day_offset|month_offset|year_offset,sk_date|"Date"|"Day Name"|"Month Name"|"Year"|"Quarter"|"Week Number"|"Is Weekend"|"Day Offset"|"Month Offset"|"Year Offset",
+"Actor Dimension",silver,actor_dim,sk_actor|actor_name,sk_actor|"Actor Name",
+"Genre Dimension",silver,genre_dim,sk_genre|genre_name,sk_genre|"Genre Name",
+"Film Actor Link",silver,film_actor_bridge,sk_film_release|sk_actor,sk_film_release|sk_actor,
+"Film Genre Link",silver,film_genre_bridge,sk_film_release|sk_genre,sk_film_release|sk_genre,
+"Release Facts",silver,film_release_fact,sk_film_release|sk_date|release_count,sk_film_release|sk_date|"Release Count",
