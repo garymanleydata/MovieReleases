@@ -1,19 +1,19 @@
 name: Daily Movie Ingest
 
 on:
-  # 1. Automatic Schedule: Runs at 08:00 UTC every day
   schedule:
     - cron: '0 8 * * *'
-  
-  # 2. Manual Trigger: Allows you to click a "Run Now" button in GitHub Actions
   workflow_dispatch:
+
+# NEW: Required to allow the bot to push commits
+permissions:
+  contents: write
 
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
 
     steps:
-      # --- SETUP ---
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -27,19 +27,13 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # --- EXECUTION ---
       - name: Run Orchestrator
         env:
-          # Inject the secret from GitHub Settings into the runner
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         run: |
-          # Convert the Orchestrator notebook to a script and run it
-          # The orchestrator handles the logic of which child notebooks to run today
           jupyter nbconvert --to python --execute --stdout orchestrate_pipeline.ipynb | python
 
-      # --- ARTIFACTS (Reports & Logs) ---
-      
-      # 1. Upload Movie Release Report (Weekly)
+      # --- ARTIFACTS ---
       - name: Upload Movie Report
         if: success() 
         uses: actions/upload-artifact@v4
@@ -48,8 +42,6 @@ jobs:
           path: Upcoming_Releases_Report.xlsx
           if-no-files-found: ignore
 
-      # 2. Upload Data Quality Report (Weekly)
-      # NEW: This saves the DQ report if it was generated today
       - name: Upload DQ Report
         if: success()
         uses: actions/upload-artifact@v4
@@ -58,11 +50,23 @@ jobs:
           path: Data_Quality_Weekly.xlsx
           if-no-files-found: ignore
 
-      # 3. Upload Execution Logs (Useful for debugging failed runs)
       - name: Upload Execution Logs
-        if: always() # Run even if pipeline failed
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Pipeline_Logs
           path: logs/
           if-no-files-found: ignore
+
+      # --- NEW: COMMIT DOCS ---
+      - name: Commit Documentation
+        # Only runs if the pipeline succeeded (so we don't commit broken diagrams)
+        if: success()
+        run: |
+          git config --global user.name 'GitHub Action Bot'
+          git config --global user.email 'action@github.com'
+          # Add the generated docs (Markdown and HTML)
+          git add docs/Live_Architecture.md docs/Live_Architecture.html
+          # Commit and Push (ignoring if no changes)
+          git commit -m "Update Live Architecture [skip ci]" || echo "No changes to commit"
+          git push

@@ -8,3 +8,4 @@ papermill
 nbconvert
 xlsxwriter
 pillow
+pyvis
