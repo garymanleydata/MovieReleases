@@ -5,7 +5,7 @@ This diagram is **auto-generated** by the ETL pipeline based on the active confi
 ```mermaid
 graph LR
     %% Generated Automatically by generate_docs.ipynb
-    %% Last Updated: 2025-12-18 08:22
+    %% Last Updated: 2025-12-19 08:21
 
     subgraph Orchestration
         JOB_10("Step 10: ingest_releases.ipynb")
